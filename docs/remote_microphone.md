@@ -15,7 +15,7 @@ apps on the host hear the client's microphone as `Microphone (Steam Streaming Mi
 ## Requirements
 
 - A client built from the `mic-passthrough` branch of
-  [daniel-zn/moonlight-qt](https://github.com/daniel-zn/moonlight-qt), with **Stream microphone to host** enabled.
+  [daniel-zn/danielzn-moonlight-qt](https://github.com/daniel-zn/danielzn-moonlight-qt), with **Stream microphone to host** enabled.
 - Steam installed on the host, so Apollo can install the Steam Streaming Microphone driver from it.
 - `stream_mic = enabled` in Apollo (Audio/Video tab).
 - In each host application, select `Microphone (Steam Streaming Microphone)` as the input device.

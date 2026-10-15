@@ -13,13 +13,13 @@ Major features:
 ## About this fork
 
 > [!NOTE]
-> This is a personal fork (`daniel-zn/Apollo`, default branch `main`) made to pair with
-> [daniel-zn/moonlight-qt](https://github.com/daniel-zn/moonlight-qt). It doesn't follow upstream updates.
+> This is a personal fork (`daniel-zn/danielzn-Apollo`, default branch `main`) made to pair with
+> [daniel-zn/danielzn-moonlight-qt](https://github.com/daniel-zn/danielzn-moonlight-qt). It doesn't follow upstream updates.
 
 What it adds on top of upstream Apollo:
 
 - **Microphone passthrough from the client (Windows).** Receives the microphone from
-  [daniel-zn/moonlight-qt](https://github.com/daniel-zn/moonlight-qt) and plays it into the Steam Streaming
+  [daniel-zn/danielzn-moonlight-qt](https://github.com/daniel-zn/danielzn-moonlight-qt) and plays it into the Steam Streaming
   Microphone, so host apps use `Microphone (Steam Streaming Microphone)` as their input. Turn it on with
   `stream_mic = enabled`. Details are in [docs/remote_microphone.md](docs/remote_microphone.md).
   - Built on [logabell's PR #1428](https://github.com/ClassicOldSong/Apollo/pull/1428), with the protocol and host
