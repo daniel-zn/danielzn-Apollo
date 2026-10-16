@@ -33,8 +33,8 @@ What it adds on top of upstream Apollo:
   frosted cards, segmented tabs, system colors, and rounded controls. It's a theme over the existing
   pages (`src_assets/common/assets/web/public/assets/css/apollo.css`), so nothing about how they work changed.
   The text uses Orbix (Barry Shawn, Besign Foundry; SIL Open Font License 1.1, in `public/assets/fonts` with its
-  license), the same font as the Artemis apps; the characters it lacks (`:` `;` `(` `)` `+` `%` and other symbols)
-  come from the system font.
+  license), the same font as the Artemis apps; digits (Orbix's 1 reads as a 7) and the characters it lacks (`:` `;` `(`
+  `)` `+` `%` and other symbols) come from the system font.
 - **Fixes to upstream:** `master` didn't compile (an AMF H.264 option read a missing field, and a pairing test
   used an old signature), and `gcm_t::decrypt` could report success when setting the IV failed.
 - **Build changes:**

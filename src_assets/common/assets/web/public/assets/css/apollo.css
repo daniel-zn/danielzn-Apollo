@@ -80,12 +80,13 @@ html[data-bs-theme=dark] {
  * Interface font: Orbix (Barry Shawn, Besign Foundry; SIL Open Font License 1.1, in
  * assets/fonts with its license), the same as the Artemis apps. unicode-range lists the
  * characters it has, so the rest (: ; ( ) + % and other symbols) come from the system font.
+ * Digits come from the system font too, as in the apps: Orbix's 1 reads as a 7.
  */
 @font-face {
     font-family: "Orbix";
     src: url("../fonts/Orbix-Regular.woff2") format("woff2");
     font-display: swap;
-    unicode-range: U+0020-0021, U+0023, U+0026, U+002C-0039, U+003F-005A, U+005C, U+0061-007A,
+    unicode-range: U+0020-0021, U+0023, U+0026, U+002C-002F, U+003F-005A, U+005C, U+0061-007A,
                    U+2018-2019, U+201C-201D;
 }
 
