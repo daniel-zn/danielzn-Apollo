@@ -1292,6 +1292,12 @@ namespace nvhttp {
             return;
           }
         }
+#ifdef _WIN32
+        else if (proc::proc.virtual_display) {
+          // The virtual display follows whichever client connects: give it this client's mode
+          proc::proc.apply_client_display_mode(launch_session);
+        }
+#endif
       } else {
         const auto& apps = proc::proc.get_apps();
         auto app_iter = std::find_if(apps.begin(), apps.end(), [&appid_str, &appuuid_str](const auto _app) {
@@ -1425,6 +1431,12 @@ namespace nvhttp {
         return;
       }
     }
+#ifdef _WIN32
+    else if (proc::proc.virtual_display) {
+      // The virtual display follows whichever client connects: give it this client's mode
+      proc::proc.apply_client_display_mode(launch_session);
+    }
+#endif
 
     auto encryption_mode = net::encryption_mode_for_address(request->remote_endpoint().address());
     if (!launch_session->rtsp_cipher && encryption_mode == config::ENCRYPTION_MODE_MANDATORY) {

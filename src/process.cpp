@@ -8,7 +8,9 @@
  #define BOOST_PROCESS_VERSION 1
 #endif
 // standard includes
+#include <cstdlib>
 #include <filesystem>
+#include <format>
 #include <string>
 #include <thread>
 #include <vector>
@@ -162,6 +164,66 @@ namespace proc {
     return cmd_path.parent_path();
   }
 
+  namespace {
+    /**
+     * @brief Size the stream renders at: the client's mode scaled by the app's (or else the client's) scale factor.
+     * @return The scale factor used.
+     */
+    int render_size(const ctx_t &app, const rtsp_stream::launch_session_t &launch_session, uint32_t &render_width, uint32_t &render_height) {
+      render_width = launch_session.width ? launch_session.width : 1920;
+      render_height = launch_session.height ? launch_session.height : 1080;
+
+      int scale_factor = launch_session.scale_factor;
+      if (app.scale_factor != 100) {
+        scale_factor = app.scale_factor;
+      }
+
+      if (scale_factor != 100) {
+        render_width *= ((float)scale_factor / 100);
+        render_height *= ((float)scale_factor / 100);
+
+        // Chop the last bit to ensure the scaled resolution is even numbered
+        // Most odd resolutions won't work well
+        render_width &= ~1;
+        render_height &= ~1;
+      }
+
+      return scale_factor;
+    }
+
+#ifdef _WIN32
+    /**
+     * @brief Refresh rate for the virtual display in mHz (doubled when double_refreshrate is on).
+     */
+    int display_fps(const rtsp_stream::launch_session_t &launch_session) {
+      int target_fps = launch_session.fps ? launch_session.fps : 60000;
+
+      if (target_fps < 1000) {
+        target_fps *= 1000;
+      }
+
+      if (config::video.double_refreshrate) {
+        target_fps *= 2;
+      }
+
+      return target_fps;
+    }
+
+    /**
+     * @brief Whether a display's current mode is width x height at fps (mHz), give or take 1 Hz of rounding.
+     */
+    bool display_has_mode(const std::wstring &display_name, uint32_t width, uint32_t height, int fps, DEVMODEW &current) {
+      current = {};
+      if (!VDISPLAY::getDeviceSettings(display_name.c_str(), current)) {
+        return false;
+      }
+
+      int hz = (int) current.dmDisplayFrequency;
+      return current.dmPelsWidth == width && current.dmPelsHeight == height && std::abs(hz * 1000 - fps) <= 1000;
+    }
+#endif
+  }  // namespace
+
   void proc_t::launch_input_only() {
     _app_id = input_only_app_id;
     _app_name = "Remote Input";
@@ -190,26 +252,9 @@ namespace proc {
     _launch_session = launch_session;
     allow_client_commands = app.allow_client_commands;
 
-    uint32_t client_width = launch_session->width ? launch_session->width : 1920;
-    uint32_t client_height = launch_session->height ? launch_session->height : 1080;
-
-    uint32_t render_width = client_width;
-    uint32_t render_height = client_height;
-
-    int scale_factor = launch_session->scale_factor;
-    if (_app.scale_factor != 100) {
-      scale_factor = _app.scale_factor;
-    }
-
-    if (scale_factor != 100) {
-      render_width *= ((float)scale_factor / 100);
-      render_height *= ((float)scale_factor / 100);
-
-      // Chop the last bit to ensure the scaled resolution is even numbered
-      // Most odd resolutions won't work well
-      render_width &= ~1;
-      render_height &= ~1;
-    }
+    uint32_t render_width;
+    uint32_t render_height;
+    int scale_factor = render_size(_app, *launch_session, render_width, render_height);
 
     launch_session->width = render_width;
     launch_session->height = render_height;
@@ -278,15 +323,10 @@ namespace proc {
 
         memcpy(&launch_session->display_guid, &device_uuid, sizeof(GUID));
 
-        int target_fps = launch_session->fps ? launch_session->fps : 60000;
+        int target_fps = display_fps(*launch_session);
 
-        if (target_fps < 1000) {
-          target_fps *= 1000;
-        }
-
-        if (config::video.double_refreshrate) {
-          target_fps *= 2;
-        }
+        _vdisplay_uuid = device_uuid_str;
+        _vdisplay_name = device_name;
 
         std::wstring vdisplayName = VDISPLAY::createVirtualDisplay(
           device_uuid_str.c_str(),
@@ -496,7 +536,21 @@ namespace proc {
     _app_launch_time = std::chrono::steady_clock::now();
 
   #ifdef _WIN32
-    auto resetHDRThread = std::thread([this, enable_hdr = launch_session->enable_hdr]{
+    apply_hdr_async(launch_session->enable_hdr, true);
+  #endif
+
+    fg.disable();
+
+#if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
+    system_tray::update_tray_playing(_app.name);
+#endif
+
+    return 0;
+  }
+
+#ifdef _WIN32
+  void proc_t::apply_hdr_async(bool enable_hdr, bool record_initial) {
+    auto resetHDRThread = std::thread([this, enable_hdr, record_initial]{
       // Windows doesn't seem to be able to set HDR correctly when a display is just connected / changed resolution,
       // so we have tooggle HDR for the virtual display manually after a delay.
       auto retryInterval = 200ms;
@@ -523,7 +577,10 @@ namespace proc {
       std::string currentDisplay = this->display_name;
       auto currentDisplayW = platf::from_utf8(currentDisplay);
 
-      initial_hdr = VDISPLAY::getDisplayHDRByName(currentDisplayW.c_str());
+      bool current_hdr = VDISPLAY::getDisplayHDRByName(currentDisplayW.c_str());
+      if (record_initial) {
+        initial_hdr = current_hdr;
+      }
 
       if (config::video.dd.hdr_option == config::video_t::dd_t::hdr_option_e::automatic) {
         mode_changed_display = currentDisplay;
@@ -539,7 +596,7 @@ namespace proc {
             BOOST_LOG(info) << "HDR enable failed for display " << currentDisplay;
           }
         }
-      } else if (initial_hdr) {
+      } else if (current_hdr) {
         if (VDISPLAY::setDisplayHDRByName(currentDisplayW.c_str(), false) && VDISPLAY::setDisplayHDRByName(currentDisplayW.c_str(), true)) {
           BOOST_LOG(info) << "HDR toggled successfully for display " << currentDisplay;
         } else {
@@ -549,16 +606,94 @@ namespace proc {
     });
 
     resetHDRThread.detach();
-  #endif
-
-    fg.disable();
-
-#if defined SUNSHINE_TRAY && SUNSHINE_TRAY >= 1
-    system_tray::update_tray_playing(_app.name);
-#endif
-
-    return 0;
   }
+
+  void proc_t::apply_client_display_mode(std::shared_ptr<rtsp_stream::launch_session_t> launch_session) {
+    if (!virtual_display || !_launch_session || vDisplayDriverStatus != VDISPLAY::DRIVER_STATUS::OK) {
+      return;
+    }
+
+    uint32_t render_width;
+    uint32_t render_height;
+    render_size(_app, *launch_session, render_width, render_height);
+    launch_session->width = render_width;
+    launch_session->height = render_height;
+
+    int target_fps = display_fps(*launch_session);
+    auto mode_str = std::format("{}x{}@{:.3f}Hz", render_width, render_height, target_fps / 1000.0);
+
+    // The resumed session streams the same virtual display, so it keeps the display's GUID
+    launch_session->virtual_display = true;
+    launch_session->display_guid = _launch_session->display_guid;
+
+    auto display_name_w = platf::from_utf8(display_name);
+    DEVMODEW current;
+    bool hdr_differs = config::video.dd.hdr_option == config::video_t::dd_t::hdr_option_e::automatic &&
+                       VDISPLAY::getDisplayHDRByName(display_name_w.c_str()) != launch_session->enable_hdr;
+
+    if (display_has_mode(display_name_w, render_width, render_height, target_fps, current)) {
+      BOOST_LOG(info) << "Virtual display "sv << display_name << " already runs at "sv << mode_str
+                      << " for client ["sv << launch_session->device_name << "], keeping it"sv;
+      if (hdr_differs) {
+        BOOST_LOG(info) << "Virtual display HDR "sv << (launch_session->enable_hdr ? "on"sv : "off"sv)
+                        << " for client ["sv << launch_session->device_name << ']';
+        apply_hdr_async(launch_session->enable_hdr, false);
+      }
+      return;
+    }
+
+    BOOST_LOG(info) << "Virtual display "sv << display_name << " runs at "sv << current.dmPelsWidth << 'x' << current.dmPelsHeight
+                    << '@' << current.dmDisplayFrequency << "Hz; client ["sv << launch_session->device_name << "] resumed at "sv << mode_str
+                    << ", changing the mode ["sv << rtsp_stream::session_count() << " other active session(s)]"sv;
+
+    VDISPLAY::changeDisplaySettings(display_name_w.c_str(), render_width, render_height, target_fps);
+
+    if (!display_has_mode(display_name_w, render_width, render_height, target_fps, current)) {
+      // The display can't take this mode (or the desktop is locked): recreate it with the mode as its own
+      BOOST_LOG(info) << "Virtual display mode change didn't take (now "sv << current.dmPelsWidth << 'x' << current.dmPelsHeight
+                      << '@' << current.dmDisplayFrequency << "Hz), recreating the virtual display at "sv << mode_str;
+
+      if (!VDISPLAY::removeVirtualDisplay(_launch_session->display_guid)) {
+        BOOST_LOG(warning) << "Virtual display remove failed before recreating it"sv;
+      }
+
+      std::wstring vdisplayName = VDISPLAY::createVirtualDisplay(
+        _vdisplay_uuid.c_str(),
+        _vdisplay_name.c_str(),
+        render_width,
+        render_height,
+        target_fps,
+        _launch_session->display_guid
+      );
+
+      if (vdisplayName.empty()) {
+        BOOST_LOG(error) << "Virtual display recreation failed, or cannot get created display name in time!"sv;
+        return;
+      }
+
+      display_name_w = vdisplayName;
+      display_name = platf::to_utf8(vdisplayName);
+      config::video.output_name = display_device::map_display_name(display_name);
+      VDISPLAY::changeDisplaySettings(display_name_w.c_str(), render_width, render_height, target_fps);
+    }
+
+    if (config::video.isolated_virtual_display_option == true) {
+      VDISPLAY::changeDisplaySettings2(display_name_w.c_str(), render_width, render_height, target_fps, true);
+    }
+
+    if (display_has_mode(display_name_w, render_width, render_height, target_fps, current)) {
+      BOOST_LOG(info) << "Virtual display "sv << display_name << " now runs at "sv << mode_str
+                      << " for client ["sv << launch_session->device_name << ']';
+    } else {
+      BOOST_LOG(warning) << "Virtual display "sv << display_name << " runs at "sv << current.dmPelsWidth << 'x' << current.dmPelsHeight
+                         << '@' << current.dmDisplayFrequency << "Hz, not the "sv << mode_str << " client ["sv
+                         << launch_session->device_name << "] asked for"sv;
+    }
+
+    // Windows needs HDR toggled again after a mode change, as after creating the display
+    apply_hdr_async(launch_session->enable_hdr, false);
+  }
+#endif
 
   int proc_t::running() {
 #ifndef _WIN32

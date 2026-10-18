@@ -138,6 +138,15 @@ namespace proc {
     boost::process::v1::environment get_env();
     void resume();
     void pause();
+
+#ifdef _WIN32
+    /**
+     * @brief Give the running app's virtual display the mode (size, refresh rate, HDR) a resuming client asked for.
+     * Changes the mode in place, or removes and recreates the virtual display when the mode can't be set.
+     * Does nothing if the display already has that mode.
+     */
+    void apply_client_display_mode(std::shared_ptr<rtsp_stream::launch_session_t> launch_session);
+#endif
     void terminate(bool immediate = false, bool needs_refresh = true);
 
   private:
@@ -160,6 +169,13 @@ namespace proc {
     boost::process::v1::group _process_group;
 
     file_t _pipe;
+#ifdef _WIN32
+    // Identity the virtual display was created with, to recreate it with another mode
+    std::string _vdisplay_uuid;
+    std::string _vdisplay_name;
+
+    void apply_hdr_async(bool enable_hdr, bool record_initial);
+#endif
     std::vector<cmd_t>::const_iterator _app_prep_it;
     std::vector<cmd_t>::const_iterator _app_prep_begin;
   };
