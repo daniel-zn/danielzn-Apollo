@@ -137,6 +137,16 @@
               <div class="form-text">{{ $t('pin.display_mode_override_desc') }} <a href="https://github.com/ClassicOldSong/Apollo/wiki/Display-Mode-Override" target="_blank">{{ $t('_common.learn_more') }}</a></div>
             </div>
 
+            <!-- Display Scale (virtual display) -->
+            <div class="mb-3" v-if="platform === 'windows'">
+              <label for="display_scale" class="form-label">{{ $t('pin.display_scale') }}</label>
+              <select id="display_scale" class="form-select" v-model.number="client.editDisplayScale">
+                <option :value="0">{{ $t('pin.display_scale_auto') }}</option>
+                <option v-for="step in displayScaleSteps" :key="step" :value="step">{{ step }}%</option>
+              </select>
+              <div class="form-text">{{ $t('pin.display_scale_desc') }}</div>
+            </div>
+
             <!-- Allow client commands -->
             <Checkbox class="mb-3"
                       id="allow_client_commands"
@@ -194,6 +204,7 @@
               </span>
               &nbsp;
               <span class="me-2">{{client.name != "" ? client.name : $t('pin.unpair_single_unknown')}}</span>
+              <span v-if="platform === 'windows' && client.display_scale" class="badge bg-secondary" :title="$t('pin.display_scale')">{{ client.display_scale }}%</span>
             </div>
             <div v-if="client.connected" class="me-2 btn btn-warning" @click="disconnectClient(client.uuid)"><i class="fas fa-link-slash"></i></div>
             <div class="me-2 btn btn-primary" @click="editClient(client)"><i class="fas fa-edit"></i></div>
@@ -367,6 +378,8 @@
       hostPort: '',
       hostName: '',
       permissionGroups,
+      // Windows' display scale steps (docs/display_scale.md)
+      displayScaleSteps: [100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500],
       clients: [],
       showApplyMessage: false,
       unpairAllPressed: false,
@@ -533,6 +546,7 @@
         client.editEnableLegacyOrdering = client.enable_legacy_ordering;
         client.editAlwaysUseVirtualDisplay = client.always_use_virtual_display;
         client.editDisplayMode = client.display_mode;
+        client.editDisplayScale = client.display_scale;
         client.edit_do = JSON.parse(JSON.stringify(client.do || []));
         client.edit_undo = JSON.parse(JSON.stringify(client.undo || []));
         currentEditingClient = client;
@@ -545,6 +559,7 @@
         client.editPerm = client.perm;
         client.editName = client.name;
         client.editDisplayMode = client.display_mode;
+        client.editDisplayScale = client.display_scale;
         client.editAllowClientCommands = client.allow_client_commands;
         client.editEnableLegacyOrdering = client.enable_legacy_ordering;
         client.editAlwaysUseVirtualDisplay = client.always_use_virtual_display;
@@ -559,6 +574,7 @@
           allow_client_commands: client.editAllowClientCommands,
           enable_legacy_ordering: client.editEnableLegacyOrdering,
           always_use_virtual_display: client.editAlwaysUseVirtualDisplay,
+          display_scale: client.editDisplayScale,
           perm: client.editPerm & permissionMapping._all,
           do: client.edit_do.reduce((filtered, {cmd: _cmd, elevated}) => {
             const cmd = _cmd.trim()
@@ -702,7 +718,8 @@
                 undo,
                 allow_client_commands,
                 always_use_virtual_display,
-                enable_legacy_ordering
+                enable_legacy_ordering,
+                display_scale
               }) => {
                 const permInt = parseInt(perm, 10);
                 return {
@@ -716,7 +733,8 @@
                   undo,
                   allow_client_commands,
                   enable_legacy_ordering,
-                  always_use_virtual_display
+                  always_use_virtual_display,
+                  display_scale: display_scale || 0
                 }
               })
               currentEditingClient = null;

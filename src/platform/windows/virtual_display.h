@@ -30,6 +30,11 @@ namespace VDISPLAY {
 	bool getDisplayHDRByName(const wchar_t* displayName);
 	bool setDisplayHDRByName(const wchar_t* displayName, bool enableAdvancedColor);
 
+	// Windows display scale of one display, in steps relative to its recommended scale (docs/display_scale.md).
+	// Uses the undocumented DisplayConfig DPI device info types that Settings uses.
+	bool getDisplayScaleByName(const wchar_t* displayName, int& minRel, int& curRel, int& maxRel);
+	bool setDisplayScaleByName(const wchar_t* displayName, int scaleRel);
+
 	void closeVDisplayDevice();
 	DRIVER_STATUS openVDisplayDevice();
 	bool startPingThread(std::function<void()> failCb);

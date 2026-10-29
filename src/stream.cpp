@@ -2228,6 +2228,11 @@ namespace stream {
       BOOST_LOG(debug) << "Resetting Input..."sv;
       input::reset(session.input);
 
+#ifdef _WIN32
+      // Remember this client's display scale if its session had the virtual display
+      proc::proc.save_display_scale(session.device_uuid);
+#endif
+
       if (!session.undo_cmds.empty()) {
         auto exec_thread = std::thread([cmd_list = session.undo_cmds]{
           for (auto &cmd : cmd_list) {

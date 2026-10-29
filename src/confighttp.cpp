@@ -891,7 +891,8 @@ namespace confighttp {
    *   "display_mode": "1920x1080x59.94",
    *   "do": [ { "cmd": "<command>", "elevated": false }, ... ],
    *   "undo": [ { "cmd": "<command>", "elevated": false }, ... ],
-   *   "perm": <uint32_t>
+   *   "perm": <uint32_t>,
+   *   "display_scale": <percent, 0 = Auto; optional, unchanged when missing>
    * }
    * @endcode
    */
@@ -913,6 +914,10 @@ namespace confighttp {
       bool enable_legacy_ordering = input_tree.value("enable_legacy_ordering", true);
       bool allow_client_commands = input_tree.value("allow_client_commands", true);
       bool always_use_virtual_display = input_tree.value("always_use_virtual_display", false);
+      std::optional<int> display_scale;
+      if (input_tree.contains("display_scale") && input_tree["display_scale"].is_number()) {
+        display_scale = input_tree["display_scale"].get<int>();
+      }
       auto do_cmds = nvhttp::extract_command_entries(input_tree, "do");
       auto undo_cmds = nvhttp::extract_command_entries(input_tree, "undo");
       auto perm = static_cast<crypto::PERM>(input_tree.value("perm", static_cast<uint32_t>(crypto::PERM::_no)) & static_cast<uint32_t>(crypto::PERM::_all));
@@ -925,7 +930,8 @@ namespace confighttp {
         perm,
         enable_legacy_ordering,
         allow_client_commands,
-        always_use_virtual_display
+        always_use_virtual_display,
+        display_scale
       );
       send_response(response, output_tree);
     } catch (std::exception &e) {

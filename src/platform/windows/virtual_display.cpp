@@ -422,6 +422,95 @@ bool findDisplayIds(const wchar_t* displayName, LUID& adapterId, uint32_t& targe
 	return true;
 }
 
+// Undocumented DisplayConfig device info types for a source's display scale, as used by Settings
+// (see the open-source SetDpi and windows-DPI-scaling-sample projects). Values are steps relative to the
+// recommended scale in Windows' list 100, 125, 150, ... 500 percent.
+constexpr auto DISPLAYCONFIG_DEVICE_INFO_GET_DPI_SCALE = static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(-3);
+constexpr auto DISPLAYCONFIG_DEVICE_INFO_SET_DPI_SCALE = static_cast<DISPLAYCONFIG_DEVICE_INFO_TYPE>(-4);
+
+struct DISPLAYCONFIG_SOURCE_DPI_SCALE_GET {
+	DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+	int32_t minScaleRel;
+	int32_t curScaleRel;
+	int32_t maxScaleRel;
+};
+
+struct DISPLAYCONFIG_SOURCE_DPI_SCALE_SET {
+	DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+	int32_t scaleRel;
+};
+
+// The source (adapter and source id) of the active path whose GDI name is displayName
+static bool findDisplaySource(const wchar_t* displayName, LUID& adapterId, uint32_t& sourceId) {
+	UINT32 pathCount;
+	UINT32 modeCount;
+	if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount)) {
+		return false;
+	}
+
+	std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+	std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+	if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), nullptr)) {
+		return false;
+	}
+	paths.resize(pathCount);
+
+	for (const auto& path : paths) {
+		DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName = {};
+		sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+		sourceName.header.size = sizeof(sourceName);
+		sourceName.header.adapterId = path.sourceInfo.adapterId;
+		sourceName.header.id = path.sourceInfo.id;
+
+		if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS &&
+		    std::wstring_view(displayName) == sourceName.viewGdiDeviceName) {
+			adapterId = path.sourceInfo.adapterId;
+			sourceId = path.sourceInfo.id;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool getDisplayScaleByName(const wchar_t* displayName, int& minRel, int& curRel, int& maxRel) {
+	LUID adapterId;
+	uint32_t sourceId;
+	if (!findDisplaySource(displayName, adapterId, sourceId)) {
+		return false;
+	}
+
+	DISPLAYCONFIG_SOURCE_DPI_SCALE_GET scale = {};
+	scale.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_DPI_SCALE;
+	scale.header.size = sizeof(scale);
+	scale.header.adapterId = adapterId;
+	scale.header.id = sourceId;
+	if (DisplayConfigGetDeviceInfo(&scale.header) != ERROR_SUCCESS) {
+		return false;
+	}
+
+	minRel = scale.minScaleRel;
+	curRel = scale.curScaleRel;
+	maxRel = scale.maxScaleRel;
+	return true;
+}
+
+bool setDisplayScaleByName(const wchar_t* displayName, int scaleRel) {
+	LUID adapterId;
+	uint32_t sourceId;
+	if (!findDisplaySource(displayName, adapterId, sourceId)) {
+		return false;
+	}
+
+	DISPLAYCONFIG_SOURCE_DPI_SCALE_SET scale = {};
+	scale.header.type = DISPLAYCONFIG_DEVICE_INFO_SET_DPI_SCALE;
+	scale.header.size = sizeof(scale);
+	scale.header.adapterId = adapterId;
+	scale.header.id = sourceId;
+	scale.scaleRel = scaleRel;
+	return DisplayConfigSetDeviceInfo(&scale.header) == ERROR_SUCCESS;
+}
+
 bool getDisplayHDR(const LUID& adapterLuid, const wchar_t* displayName) {
 	Microsoft::WRL::ComPtr<IDXGIFactory1> dxgiFactory;
 	HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(&dxgiFactory));

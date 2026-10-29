@@ -107,6 +107,7 @@ namespace crypto {
     bool enable_legacy_ordering;
     bool allow_client_commands;
     bool always_use_virtual_display;
+    int display_scale = 0;  ///< Windows display scale in percent for the virtual display, 0 = Auto (docs/display_scale.md)
   };
 
   using p_named_cert_t = std::shared_ptr<named_cert_t>;

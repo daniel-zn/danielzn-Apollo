@@ -90,6 +90,8 @@ set(SUNSHINE_TARGET_FILES
         "${CMAKE_SOURCE_DIR}/src/stream.cpp"
         "${CMAKE_SOURCE_DIR}/src/mic_packet.cpp"
         "${CMAKE_SOURCE_DIR}/src/mic_packet.h"
+        "${CMAKE_SOURCE_DIR}/src/display_scale.cpp"
+        "${CMAKE_SOURCE_DIR}/src/display_scale.h"
         "${CMAKE_SOURCE_DIR}/src/stream.h"
         "${CMAKE_SOURCE_DIR}/src/video.cpp"
         "${CMAKE_SOURCE_DIR}/src/video.h"

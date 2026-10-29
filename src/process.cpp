@@ -46,6 +46,18 @@
 
   // _SH constants for _wfsopen()
   #include <share.h>
+
+  #include <mutex>
+
+  #include "display_scale.h"
+  #include "nvhttp.h"
+
+namespace platf {
+  // platform/windows/misc.cpp
+  HANDLE retrieve_users_token(bool elevated);
+  bool is_running_as_system();
+  std::error_code impersonate_current_user(HANDLE user_token, std::function<void()> callback);
+}  // namespace platf
 #endif
 
 #define DEFAULT_APP_IMAGE_PATH SUNSHINE_ASSETS_DIR "/box.png"
@@ -55,6 +67,40 @@ namespace proc {
   namespace pt = boost::property_tree;
 
   proc_t proc;
+
+#ifdef _WIN32
+  namespace {
+    std::mutex display_scale_mutex;
+
+    // Run fn as the signed-in user when Apollo runs as SYSTEM, so the scale lands in that user's desktop
+    // like a change in Settings. Runs it as ourselves when there's no user to impersonate.
+    bool as_desktop_user(const std::function<bool()> &fn) {
+      if (!platf::is_running_as_system()) {
+        return fn();
+      }
+      HANDLE token = platf::retrieve_users_token(false);
+      if (!token) {
+        return fn();
+      }
+      bool ok = false;
+      auto ec = platf::impersonate_current_user(token, [&]() {
+        ok = fn();
+      });
+      CloseHandle(token);
+      return ec ? fn() : ok;
+    }
+
+    bool read_scale(const std::wstring &display, display_scale::state_t &state) {
+      return as_desktop_user([&]() {
+        return VDISPLAY::getDisplayScaleByName(display.c_str(), state.min_rel, state.cur_rel, state.max_rel);
+      });
+    }
+
+    std::string scale_text(int stored) {
+      return stored == display_scale::auto_scale ? "Auto"s : std::to_string(stored) + '%';
+    }
+  }  // namespace
+#endif
 
   int input_only_app_id = -1;
   std::string input_only_app_id_str;
@@ -380,6 +426,12 @@ namespace proc {
     // It is already handled by Windows properly.
     if (this->virtual_display) {
       display_device::reset_persistence();
+
+      // The launching client owns the virtual display: give it the client's remembered scale
+      std::lock_guard lock {display_scale_mutex};
+      _scale_owner_uuid = launch_session->unique_id;
+      _scale_owner_name = launch_session->device_name;
+      apply_owner_scale();
     }
 
 #else
@@ -608,10 +660,112 @@ namespace proc {
     resetHDRThread.detach();
   }
 
+
+  void proc_t::save_owner_scale(std::string_view why) {
+    if (_scale_owner_uuid.empty() || !virtual_display || display_name.empty()) {
+      return;
+    }
+    auto stored = nvhttp::get_client_display_scale(_scale_owner_uuid);
+    if (!stored) {
+      return;
+    }
+    display_scale::state_t state;
+    if (!read_scale(platf::from_utf8(display_name), state)) {
+      BOOST_LOG(warning) << "Couldn't read the scale of virtual display "sv << display_name << " to remember it for client ["sv
+                         << _scale_owner_name << ']';
+      return;
+    }
+    int value = display_scale::remembered(state, *stored);
+    if (value != *stored) {
+      nvhttp::set_client_display_scale(_scale_owner_uuid, value);
+      BOOST_LOG(info) << "Display scale for client ["sv << _scale_owner_name << "] is now "sv << scale_text(value) << " (virtual display at "sv
+                      << display_scale::current(state) << "%, recommended "sv << display_scale::recommended(state) << "%; "sv << why << ')';
+    } else {
+      BOOST_LOG(info) << "Display scale for client ["sv << _scale_owner_name << "] stays "sv << scale_text(value) << " ("sv << why << ')';
+    }
+  }
+
+  void proc_t::apply_owner_scale() {
+    if (_scale_owner_uuid.empty() || !virtual_display || display_name.empty()) {
+      return;
+    }
+    auto stored = nvhttp::get_client_display_scale(_scale_owner_uuid);
+    if (!stored) {
+      return;
+    }
+    auto display = platf::from_utf8(display_name);
+
+    // A display that was just created or changed may take a moment to show up as an active path
+    display_scale::state_t state;
+    for (auto wait = 100ms; !read_scale(display, state); wait *= 2) {
+      if (wait > 1600ms) {
+        BOOST_LOG(warning) << "Couldn't read the scale of virtual display "sv << display_name << "; client ["sv << _scale_owner_name
+                           << "] keeps whatever Windows gives it"sv;
+        return;
+      }
+      std::this_thread::sleep_for(wait);
+    }
+
+    auto plan = display_scale::plan(state, *stored);
+    if (plan.clamped) {
+      BOOST_LOG(info) << "Display scale "sv << scale_text(*stored) << " for client ["sv << _scale_owner_name << "] isn't allowed at this resolution ("sv
+                      << display_scale::steps[0] << "% to "sv << display_scale::plan(state, display_scale::steps.back()).percent << "%), using "sv
+                      << plan.percent << '%';
+    }
+    if (plan.rel == state.cur_rel) {
+      BOOST_LOG(info) << "Virtual display "sv << display_name << " keeps scale "sv << plan.percent << "% for client ["sv << _scale_owner_name
+                      << "] ("sv << scale_text(*stored) << ')';
+      return;
+    }
+
+    auto set_and_check = [&]() {
+      display_scale::state_t now;
+      return VDISPLAY::setDisplayScaleByName(display.c_str(), plan.rel) &&
+             VDISPLAY::getDisplayScaleByName(display.c_str(), now.min_rel, now.cur_rel, now.max_rel) && now.cur_rel == plan.rel;
+    };
+    // As the user first (like Settings); as ourselves if that didn't take
+    if (as_desktop_user(set_and_check) || set_and_check()) {
+      BOOST_LOG(info) << "Virtual display "sv << display_name << " scale set to "sv << plan.percent << "% (was "sv << display_scale::current(state)
+                      << "%) for client ["sv << _scale_owner_name << "] ("sv << scale_text(*stored) << ')';
+    } else {
+      BOOST_LOG(warning) << "Setting virtual display "sv << display_name << " scale to "sv << plan.percent << "% for client ["sv
+                         << _scale_owner_name << "] failed"sv;
+    }
+  }
+
+  void proc_t::save_display_scale(const std::string &uuid) {
+    std::lock_guard lock {display_scale_mutex};
+    if (!uuid.empty() && uuid == _scale_owner_uuid) {
+      save_owner_scale("session ended"sv);
+    }
+  }
+
+  void proc_t::apply_display_scale_if_owner(const std::string &uuid) {
+    std::lock_guard lock {display_scale_mutex};
+    if (!uuid.empty() && uuid == _scale_owner_uuid) {
+      apply_owner_scale();
+    }
+  }
+
   void proc_t::apply_client_display_mode(std::shared_ptr<rtsp_stream::launch_session_t> launch_session) {
     if (!virtual_display || !_launch_session || vDisplayDriverStatus != VDISPLAY::DRIVER_STATUS::OK) {
       return;
     }
+
+    // The resuming client takes the virtual display over: remember the previous owner's scale first,
+    // then give the display this client's scale once its mode is set (the most recent client wins)
+    std::lock_guard scale_lock {display_scale_mutex};
+    if (_scale_owner_uuid != launch_session->unique_id) {
+      save_owner_scale("client ["s + launch_session->device_name + "] took the virtual display over");
+      BOOST_LOG(info) << "Virtual display owner: client ["sv << launch_session->device_name << "] (was ["sv << _scale_owner_name << "])"sv;
+    } else {
+      save_owner_scale("resumed"sv);
+    }
+    _scale_owner_uuid = launch_session->unique_id;
+    _scale_owner_name = launch_session->device_name;
+    auto apply_scale = util::fail_guard([this]() {
+      apply_owner_scale();
+    });
 
     uint32_t render_width;
     uint32_t render_height;
@@ -892,6 +1046,14 @@ namespace proc {
     }
 
     bool used_virtual_display = vDisplayDriverStatus == VDISPLAY::DRIVER_STATUS::OK && _launch_session && _launch_session->virtual_display;
+    {
+      std::lock_guard lock {display_scale_mutex};
+      if (used_virtual_display) {
+        save_owner_scale("app stopped"sv);
+      }
+      _scale_owner_uuid.clear();
+      _scale_owner_name.clear();
+    }
     if (used_virtual_display) {
       if (VDISPLAY::removeVirtualDisplay(_launch_session->display_guid)) {
         BOOST_LOG(info) << "Virtual Display removed successfully";

@@ -146,6 +146,16 @@ namespace proc {
      * Does nothing if the display already has that mode.
      */
     void apply_client_display_mode(std::shared_ptr<rtsp_stream::launch_session_t> launch_session);
+
+    /**
+     * @brief A session of client `uuid` ended: if that client owns the virtual display, remember its scale.
+     */
+    void save_display_scale(const std::string &uuid);
+
+    /**
+     * @brief Client `uuid`'s stored scale changed (web UI): set it now if that client owns the virtual display.
+     */
+    void apply_display_scale_if_owner(const std::string &uuid);
 #endif
     void terminate(bool immediate = false, bool needs_refresh = true);
 
@@ -174,7 +184,13 @@ namespace proc {
     std::string _vdisplay_uuid;
     std::string _vdisplay_name;
 
+    // The client whose mode (and scale) the virtual display has: the one that launched or resumed last
+    std::string _scale_owner_uuid;
+    std::string _scale_owner_name;
+
     void apply_hdr_async(bool enable_hdr, bool record_initial);
+    void save_owner_scale(std::string_view why);
+    void apply_owner_scale();
 #endif
     std::vector<cmd_t>::const_iterator _app_prep_it;
     std::vector<cmd_t>::const_iterator _app_prep_begin;

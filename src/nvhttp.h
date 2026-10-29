@@ -9,6 +9,7 @@
 #include <string>
 #include <chrono>
 #include <list>
+#include <optional>
 
 // lib includes
 #include <boost/property_tree/ptree.hpp>
@@ -268,6 +269,7 @@ namespace nvhttp {
    * @param[in]  enable_legacy_ordering  Enable legacy ordering
    * @param[in]  allow_client_commands  Allow client commands
    * @param[in]  always_use_virtual_display  Always use virtual display
+   * @param[in]  display_scale  Windows display scale for the virtual display (0 = Auto); unchanged when empty
    * 
    * @return     Whether the update is successful
    */
@@ -280,6 +282,28 @@ namespace nvhttp {
     const crypto::PERM newPerm,
     const bool enable_legacy_ordering,
     const bool allow_client_commands,
-    const bool always_use_virtual_display
+    const bool always_use_virtual_display,
+    const std::optional<int> display_scale = std::nullopt
   );
+
+  /**
+   * @brief A client's stored display scale (percent, 0 = Auto), or empty for an unknown client.
+   */
+  std::optional<int> get_client_display_scale(const std::string &uuid);
+
+  /**
+   * @brief Store a client's display scale (normalized to a Windows step, 0 = Auto) and save the state file.
+   * @return Whether the client is known.
+   */
+  bool set_client_display_scale(const std::string &uuid, int scale);
+
+  /**
+   * @brief Write the paired clients to the state file (`config::nvhttp.file_state`).
+   */
+  void save_state();
+
+  /**
+   * @brief Read the paired clients from the state file (`config::nvhttp.file_state`).
+   */
+  void load_state();
 }  // namespace nvhttp

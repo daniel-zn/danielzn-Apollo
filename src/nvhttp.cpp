@@ -38,6 +38,7 @@
 #include "uuid.h"
 #include "video.h"
 #include "zwpad.h"
+#include "display_scale.h"
 
 #ifdef _WIN32
   #include "platform/windows/virtual_display.h"
@@ -252,6 +253,7 @@ namespace nvhttp {
         named_cert_node["enable_legacy_ordering"] = named_cert_p->enable_legacy_ordering;
         named_cert_node["allow_client_commands"] = named_cert_p->allow_client_commands;
         named_cert_node["always_use_virtual_display"] = named_cert_p->always_use_virtual_display;
+        named_cert_node["display_scale"] = named_cert_p->display_scale;
 
         // Add "do" commands if available.
         if (!named_cert_p->do_cmds.empty()) {
@@ -283,6 +285,17 @@ namespace nvhttp {
     } catch (std::exception &e) {
       BOOST_LOG(error) << "Couldn't write "sv << config::nvhttp.file_state << ": "sv << e.what();
       return;
+    }
+  }
+
+  /**
+   * @brief A client's stored display scale from its state entry: Auto when missing or unreadable.
+   */
+  static int read_display_scale(const nlohmann::json &el) {
+    try {
+      return display_scale::normalize(util::get_non_string_json_value<int>(el, "display_scale", display_scale::auto_scale));
+    } catch (std::exception &) {
+      return display_scale::auto_scale;
     }
   }
 
@@ -349,6 +362,7 @@ namespace nvhttp {
         named_cert_p->enable_legacy_ordering = el.value("enable_legacy_ordering", true);
         named_cert_p->allow_client_commands = el.value("allow_client_commands", true);
         named_cert_p->always_use_virtual_display = el.value("always_use_virtual_display", false);
+        named_cert_p->display_scale = read_display_scale(el);
         // Load command entries for "do" and "undo" keys.
         named_cert_p->do_cmds = extract_command_entries(el, "do");
         named_cert_p->undo_cmds = extract_command_entries(el, "undo");
@@ -1026,6 +1040,7 @@ namespace nvhttp {
       named_cert_node["enable_legacy_ordering"] = named_cert->enable_legacy_ordering;
       named_cert_node["allow_client_commands"] = named_cert->allow_client_commands;
       named_cert_node["always_use_virtual_display"] = named_cert->always_use_virtual_display;
+      named_cert_node["display_scale"] = named_cert->display_scale;
 
       // Add "do" commands if available
       if (!named_cert->do_cmds.empty()) {
@@ -1843,7 +1858,8 @@ namespace nvhttp {
     const crypto::PERM newPerm,
     const bool enable_legacy_ordering,
     const bool allow_client_commands,
-    const bool always_use_virtual_display
+    const bool always_use_virtual_display,
+    const std::optional<int> display_scale
   ) {
     find_and_udpate_session_info(uuid, name, newPerm);
 
@@ -1860,11 +1876,46 @@ namespace nvhttp {
         named_cert_p->enable_legacy_ordering = enable_legacy_ordering;
         named_cert_p->allow_client_commands = allow_client_commands;
         named_cert_p->always_use_virtual_display = always_use_virtual_display;
+        bool scale_changed = false;
+        if (display_scale) {
+          int scale = display_scale::normalize(*display_scale);
+          scale_changed = scale != named_cert_p->display_scale;
+          named_cert_p->display_scale = scale;
+        }
         save_state();
+#ifdef _WIN32
+        if (scale_changed) {
+          // Show the new scale right away if this client's session has the virtual display
+          proc::proc.apply_display_scale_if_owner(uuid);
+        }
+#endif
         return true;
       }
     }
 
+    return false;
+  }
+
+  std::optional<int> get_client_display_scale(const std::string &uuid) {
+    for (auto &named_cert_p : client_root.named_devices) {
+      if (named_cert_p->uuid == uuid) {
+        return named_cert_p->display_scale;
+      }
+    }
+    return std::nullopt;
+  }
+
+  bool set_client_display_scale(const std::string &uuid, int scale) {
+    scale = display_scale::normalize(scale);
+    for (auto &named_cert_p : client_root.named_devices) {
+      if (named_cert_p->uuid == uuid) {
+        if (named_cert_p->display_scale != scale) {
+          named_cert_p->display_scale = scale;
+          save_state();
+        }
+        return true;
+      }
+    }
     return false;
   }
 
