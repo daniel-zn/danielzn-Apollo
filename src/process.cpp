@@ -50,6 +50,7 @@
   #include <mutex>
 
   #include "display_scale.h"
+  #include "display_switch.h"
   #include "nvhttp.h"
 
 namespace platf {
@@ -256,16 +257,36 @@ namespace proc {
     }
 
     /**
-     * @brief Whether a display's current mode is width x height at fps (mHz), give or take 1 Hz of rounding.
+     * @brief A display's current mode, or a zero mode when it can't be read.
      */
-    bool display_has_mode(const std::wstring &display_name, uint32_t width, uint32_t height, int fps, DEVMODEW &current) {
-      current = {};
+    display_switch::display_mode_t read_mode(const std::wstring &display_name) {
+      DEVMODEW current {};
       if (!VDISPLAY::getDeviceSettings(display_name.c_str(), current)) {
-        return false;
+        return {};
       }
+      return {current.dmPelsWidth, current.dmPelsHeight, (int) current.dmDisplayFrequency};
+    }
 
-      int hz = (int) current.dmDisplayFrequency;
-      return current.dmPelsWidth == width && current.dmPelsHeight == height && std::abs(hz * 1000 - fps) <= 1000;
+    std::string mode_text(const display_switch::display_mode_t &mode) {
+      return std::format("{}x{}@{}Hz", mode.width, mode.height, mode.hz);
+    }
+
+    /**
+     * @brief Read a display's mode back after a change, a few times over about half a second, and say whether
+     * the change held (Windows can report a new mode and fall back to the old one moments later).
+     * @param last Set to the last mode read.
+     */
+    bool mode_held(const std::wstring &display_name, uint32_t width, uint32_t height, int fps, display_switch::display_mode_t &last) {
+      std::vector<display_switch::display_mode_t> readings;
+      for (auto wait : {0ms, 150ms, 150ms, 200ms}) {
+        std::this_thread::sleep_for(wait);
+        last = read_mode(display_name);
+        readings.push_back(last);
+        if (!display_switch::matches(last, width, height, fps)) {
+          break;
+        }
+      }
+      return display_switch::held(readings, width, height, fps);
     }
 #endif
   }  // namespace
@@ -755,9 +776,11 @@ namespace proc {
     // The resuming client takes the virtual display over: remember the previous owner's scale first,
     // then give the display this client's scale once its mode is set (the most recent client wins)
     std::lock_guard scale_lock {display_scale_mutex};
-    if (_scale_owner_uuid != launch_session->unique_id) {
+    const bool same_owner = !_scale_owner_uuid.empty() && _scale_owner_uuid == launch_session->unique_id;
+    const std::string previous_owner = _scale_owner_name;
+    if (!same_owner) {
       save_owner_scale("client ["s + launch_session->device_name + "] took the virtual display over");
-      BOOST_LOG(info) << "Virtual display owner: client ["sv << launch_session->device_name << "] (was ["sv << _scale_owner_name << "])"sv;
+      BOOST_LOG(info) << "Virtual display owner: client ["sv << launch_session->device_name << "] (was ["sv << previous_owner << "])"sv;
     } else {
       save_owner_scale("resumed"sv);
     }
@@ -773,41 +796,58 @@ namespace proc {
     launch_session->width = render_width;
     launch_session->height = render_height;
 
-    int target_fps = display_fps(*launch_session);
-    auto mode_str = std::format("{}x{}@{:.3f}Hz", render_width, render_height, target_fps / 1000.0);
+    const int target_fps = display_fps(*launch_session);
+    const auto mode_str = std::format("{}x{}@{:.3f}Hz", render_width, render_height, target_fps / 1000.0);
+    const auto &client = launch_session->device_name;
+    const auto others = rtsp_stream::session_count();
 
     // The resumed session streams the same virtual display, so it keeps the display's GUID
     launch_session->virtual_display = true;
     launch_session->display_guid = _launch_session->display_guid;
 
     auto display_name_w = platf::from_utf8(display_name);
-    DEVMODEW current;
-    bool hdr_differs = config::video.dd.hdr_option == config::video_t::dd_t::hdr_option_e::automatic &&
-                       VDISPLAY::getDisplayHDRByName(display_name_w.c_str()) != launch_session->enable_hdr;
+    auto now = read_mode(display_name_w);
+    auto step = display_switch::on_connect(same_owner, display_switch::matches(now, render_width, render_height, target_fps));
 
-    if (display_has_mode(display_name_w, render_width, render_height, target_fps, current)) {
-      BOOST_LOG(info) << "Virtual display "sv << display_name << " already runs at "sv << mode_str
-                      << " for client ["sv << launch_session->device_name << "], keeping it"sv;
-      if (hdr_differs) {
-        BOOST_LOG(info) << "Virtual display HDR "sv << (launch_session->enable_hdr ? "on"sv : "off"sv)
-                        << " for client ["sv << launch_session->device_name << ']';
+    if (step == display_switch::step_e::keep) {
+      BOOST_LOG(info) << "Virtual display "sv << display_name << " already runs at "sv << mode_str << " for client ["sv << client << "], keeping it"sv;
+      if (config::video.dd.hdr_option == config::video_t::dd_t::hdr_option_e::automatic &&
+          VDISPLAY::getDisplayHDRByName(display_name_w.c_str()) != launch_session->enable_hdr) {
+        BOOST_LOG(info) << "Virtual display HDR "sv << (launch_session->enable_hdr ? "on"sv : "off"sv) << " for client ["sv << client << ']';
         apply_hdr_async(launch_session->enable_hdr, false);
       }
       return;
     }
 
-    BOOST_LOG(info) << "Virtual display "sv << display_name << " runs at "sv << current.dmPelsWidth << 'x' << current.dmPelsHeight
-                    << '@' << current.dmDisplayFrequency << "Hz; client ["sv << launch_session->device_name << "] resumed at "sv << mode_str
-                    << ", changing the mode ["sv << rtsp_stream::session_count() << " other active session(s)]"sv;
+    auto set_mode = [&]() {
+      VDISPLAY::changeDisplaySettings(display_name_w.c_str(), render_width, render_height, target_fps);
+      if (config::video.isolated_virtual_display_option == true) {
+        VDISPLAY::changeDisplaySettings2(display_name_w.c_str(), render_width, render_height, target_fps, true);
+      }
+    };
 
-    VDISPLAY::changeDisplaySettings(display_name_w.c_str(), render_width, render_height, target_fps);
+    if (step == display_switch::step_e::change_in_place) {
+      BOOST_LOG(info) << "Virtual display "sv << display_name << " runs at "sv << mode_text(now) << "; client ["sv << client << "] resumed at "sv
+                      << mode_str << ", changing the mode in place ["sv << others << " other active session(s)]"sv;
+      set_mode();
+      step = display_switch::after_in_place(mode_held(display_name_w, render_width, render_height, target_fps, now));
+      if (step == display_switch::step_e::keep) {
+        BOOST_LOG(info) << "Virtual display "sv << display_name << " now runs at "sv << mode_str << " for client ["sv << client << ']';
+      } else {
+        // The display can't take this mode (odd sizes, a locked desktop) or fell back: recreate it with the mode as its own
+        BOOST_LOG(info) << "Virtual display mode change didn't hold (reads back "sv << mode_text(now) << "), recreating the virtual display at "sv << mode_str;
+      }
+    } else {
+      // Another client: a new display, so nothing of the previous client's mode carries over
+      BOOST_LOG(info) << "Virtual display "sv << display_name << " runs at "sv << mode_text(now) << " for client ["sv << previous_owner << "]; client ["sv
+                      << client << "] connected at "sv << mode_str << ", recreating the virtual display ["sv << others << " other active session(s)"sv
+                      << (others ? ", the newest client wins"sv : ""sv) << ']';
+    }
 
-    if (!display_has_mode(display_name_w, render_width, render_height, target_fps, current)) {
-      // The display can't take this mode (or the desktop is locked): recreate it with the mode as its own
-      BOOST_LOG(info) << "Virtual display mode change didn't take (now "sv << current.dmPelsWidth << 'x' << current.dmPelsHeight
-                      << '@' << current.dmDisplayFrequency << "Hz), recreating the virtual display at "sv << mode_str;
-
-      if (!VDISPLAY::removeVirtualDisplay(_launch_session->display_guid)) {
+    if (step == display_switch::step_e::recreate) {
+      if (VDISPLAY::removeVirtualDisplay(_launch_session->display_guid)) {
+        BOOST_LOG(info) << "Virtual display "sv << display_name << " removed for recreating"sv;
+      } else {
         BOOST_LOG(warning) << "Virtual display remove failed before recreating it"sv;
       }
 
@@ -828,20 +868,15 @@ namespace proc {
       display_name_w = vdisplayName;
       display_name = platf::to_utf8(vdisplayName);
       config::video.output_name = display_device::map_display_name(display_name);
-      VDISPLAY::changeDisplaySettings(display_name_w.c_str(), render_width, render_height, target_fps);
-    }
+      BOOST_LOG(info) << "Virtual display recreated at "sv << display_name << " (reads "sv << mode_text(read_mode(display_name_w)) << "), setting "sv << mode_str;
+      set_mode();
 
-    if (config::video.isolated_virtual_display_option == true) {
-      VDISPLAY::changeDisplaySettings2(display_name_w.c_str(), render_width, render_height, target_fps, true);
-    }
-
-    if (display_has_mode(display_name_w, render_width, render_height, target_fps, current)) {
-      BOOST_LOG(info) << "Virtual display "sv << display_name << " now runs at "sv << mode_str
-                      << " for client ["sv << launch_session->device_name << ']';
-    } else {
-      BOOST_LOG(warning) << "Virtual display "sv << display_name << " runs at "sv << current.dmPelsWidth << 'x' << current.dmPelsHeight
-                         << '@' << current.dmDisplayFrequency << "Hz, not the "sv << mode_str << " client ["sv
-                         << launch_session->device_name << "] asked for"sv;
+      if (mode_held(display_name_w, render_width, render_height, target_fps, now)) {
+        BOOST_LOG(info) << "Virtual display "sv << display_name << " now runs at "sv << mode_str << " for client ["sv << client << ']';
+      } else {
+        BOOST_LOG(warning) << "Virtual display "sv << display_name << " runs at "sv << mode_text(now) << ", not the "sv << mode_str << " client ["sv
+                           << client << "] asked for, even after recreating it"sv;
+      }
     }
 
     // Windows needs HDR toggled again after a mode change, as after creating the display

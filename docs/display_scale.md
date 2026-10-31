@@ -28,6 +28,25 @@ Windows' recommended value for the resolution.
   inherits the previous client's scale.
 - **Several clients.** The client that connected or resumed most recently owns the display and its scale
   (the same rule as the display mode). The log names the owner.
+
+## The virtual display's mode when clients switch
+
+When a client launches or resumes the running app (`apply_client_display_mode`, decisions in
+`src/display_switch.h`):
+
+- **Another client than the owner** (the last one to launch or resume): the virtual display is removed and created
+  again, with the same identity, at the new client's mode, even when the mode is the same. The previous owner's
+  scale is saved first; HDR and the new owner's scale are applied once the new display is up. The running app stays
+  up (its windows may move). With other sessions still streaming, the newest client still wins and the log says so.
+- **The owner again, same mode:** nothing changes.
+- **The owner again, another mode:** the mode is set in place and read back a few times over about half a second;
+  if it doesn't read back as asked (Windows sometimes reports a new mode and falls back to the old one), the display
+  is recreated.
+
+Log lines: `Virtual display … runs at … for client [A]; client [B] connected at …, recreating the virtual display`,
+`… changing the mode in place`, `Virtual display mode change didn't hold (reads back …), recreating …`,
+`Virtual display recreated at … (reads …), setting …`, `… now runs at …`, and a warning
+`… not the … client [X] asked for, even after recreating it` if even that fails.
 - **Not allowed at this resolution.** Windows limits the scale range by resolution. A stored scale outside the
   range is clamped to the nearest allowed step and logged; the stored value stays as it was, so a larger
   resolution later gets the full value.

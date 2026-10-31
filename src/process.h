@@ -142,8 +142,9 @@ namespace proc {
 #ifdef _WIN32
     /**
      * @brief Give the running app's virtual display the mode (size, refresh rate, HDR) a resuming client asked for.
-     * Changes the mode in place, or removes and recreates the virtual display when the mode can't be set.
-     * Does nothing if the display already has that mode.
+     * A client other than the display's owner always gets the display removed and recreated at its mode. The owner
+     * keeps the display if it already has the mode, else gets the mode set in place; a change that doesn't hold
+     * when read back recreates the display (src/display_switch.h).
      */
     void apply_client_display_mode(std::shared_ptr<rtsp_stream::launch_session_t> launch_session);
 
