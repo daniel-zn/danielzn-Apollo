@@ -8,6 +8,7 @@
 #include <Windows.h>
 
 // standard includes
+#include <atomic>
 #include <cmath>
 #include <thread>
 
@@ -18,6 +19,7 @@
 #include "keylayout.h"
 #include "misc.h"
 #include "src/config.h"
+#include "src/cursor_state.h"
 #include "src/globals.h"
 #include "src/logging.h"
 #include "src/platform/common.h"
@@ -33,6 +35,19 @@ namespace platf {
   using namespace std::literals;
 
   thread_local HDESK _lastKnownInputDesktop = nullptr;
+
+  // What Apollo injected last, for telling "Hide pointer while typing" from a game hiding the cursor
+  static std::atomic<std::uint64_t> injected_mouse_events {0};
+  static std::atomic<bool> last_injected_keyboard {false};
+
+  static void note_injected(const INPUT &i) {
+    if (i.type == INPUT_MOUSE) {
+      injected_mouse_events.fetch_add(1, std::memory_order_relaxed);
+      last_injected_keyboard.store(false, std::memory_order_relaxed);
+    } else if (i.type == INPUT_KEYBOARD) {
+      last_injected_keyboard.store(true, std::memory_order_relaxed);
+    }
+  }
 
   constexpr touch_port_t target_touch_port {
     0,
@@ -475,6 +490,7 @@ namespace platf {
    * @param i The `INPUT` struct to send.
    */
   void send_input(INPUT &i) {
+    note_injected(i);
   retry:
     auto send = SendInput(1, &i, sizeof(INPUT));
     if (send != 1) {
@@ -1760,6 +1776,55 @@ namespace platf {
    * @brief Returns the supported platform capabilities to advertise to the client.
    * @return Capability flags.
    */
+  bool sample_cursor(stream::cursor::sample_t &sample) {
+    sample = {};
+
+    CURSORINFO info {};
+    info.cbSize = sizeof(info);
+    if (!GetCursorInfo(&info)) {
+      // The input desktop may have changed (UAC, lock screen). Follow it, at most every 2 seconds.
+      static thread_local std::chrono::steady_clock::time_point next_sync;
+      auto now = std::chrono::steady_clock::now();
+      if (now < next_sync) {
+        return true;
+      }
+      next_sync = now + 2s;
+      auto hDesk = syncThreadDesktop();
+      if (_lastKnownInputDesktop == hDesk) {
+        return true;
+      }
+      _lastKnownInputDesktop = hDesk;
+      info.cbSize = sizeof(info);
+      if (!GetCursorInfo(&info)) {
+        return true;
+      }
+    }
+
+    sample.valid = true;
+    // CURSOR_SUPPRESSED is touch or pen input, not a game
+    sample.visible = (info.flags & (CURSOR_SHOWING | CURSOR_SUPPRESSED)) != 0;
+
+    // Confined to less than the monitor it's on: a game holding the cursor in its window.
+    // (Unconfined, GetClipCursor reports the whole screen, which is never smaller than a monitor.)
+    RECT clip;
+    if (GetClipCursor(&clip)) {
+      MONITORINFO mi {};
+      mi.cbSize = sizeof(mi);
+      if (GetMonitorInfoW(MonitorFromRect(&clip, MONITOR_DEFAULTTONEAREST), &mi)) {
+        sample.clipped = (clip.right - clip.left) < (mi.rcMonitor.right - mi.rcMonitor.left) ||
+                         (clip.bottom - clip.top) < (mi.rcMonitor.bottom - mi.rcMonitor.top);
+      }
+    }
+
+    // "Hide pointer while typing" is a per-user setting that Apollo (running as SYSTEM) can't read
+    // cheaply. It's on by default, and assuming it costs little: a game entered with the keyboard
+    // counts as captured once the mouse moves.
+    sample.hides_while_typing = true;
+    sample.last_input_keyboard = last_injected_keyboard.load(std::memory_order_relaxed);
+    sample.mouse_events = injected_mouse_events.load(std::memory_order_relaxed);
+    return true;
+  }
+
   platform_caps::caps_t get_capabilities() {
     platform_caps::caps_t caps = 0;
 

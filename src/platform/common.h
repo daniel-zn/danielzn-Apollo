@@ -72,6 +72,10 @@ namespace nvenc {
   class nvenc_base;
 }
 
+namespace stream::cursor {
+  struct sample_t;
+}
+
 namespace platf {
   // Limited by bits in activeGamepadMask
   constexpr auto MAX_GAMEPADS = 16;
@@ -842,6 +846,13 @@ namespace platf {
    * @return Capability flags.
    */
   platform_caps::caps_t get_capabilities();
+
+  /**
+   * @brief Looks at the host cursor for the cursor capture extension (see cursor_state.h).
+   * @param sample Filled in when the platform supports it.
+   * @return false where the platform doesn't support it (then the host doesn't advertise it).
+   */
+  bool sample_cursor(stream::cursor::sample_t &sample);
 
 #define SERVICE_NAME "Apollo"
 #define SERVICE_TYPE "_nvstream._tcp"

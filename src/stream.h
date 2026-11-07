@@ -36,6 +36,8 @@ namespace stream {
 
     uint32_t encryptionFlagsEnabled;
 
+    bool cursor_state = false;  ///< The client asked for cursor capture messages (cursor_state.h)
+
     std::optional<int> gcmap;
   };
 

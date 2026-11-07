@@ -109,6 +109,10 @@ namespace platf {
     platf::gamepad::battery(raw, battery);
   }
 
+  bool sample_cursor(stream::cursor::sample_t &) {
+    return false;
+  }
+
   platform_caps::caps_t get_capabilities() {
     platform_caps::caps_t caps = 0;
     // TODO: if has_uinput

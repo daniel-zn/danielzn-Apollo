@@ -589,6 +589,10 @@ const KeyCodeMap kKeyCodesMap[] = {
    * @brief Returns the supported platform capabilities to advertise to the client.
    * @return Capability flags.
    */
+  bool sample_cursor(stream::cursor::sample_t &) {
+    return false;
+  }
+
   platform_caps::caps_t get_capabilities() {
     return 0;
   }

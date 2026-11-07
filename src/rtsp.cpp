@@ -23,6 +23,7 @@ extern "C" {
 
 // local includes
 #include "config.h"
+#include "cursor_state.h"
 #include "globals.h"
 #include "input.h"
 #include "logging.h"
@@ -829,6 +830,14 @@ namespace rtsp_stream {
       ss << "a=fmtp:97 surround-params="sv << session.surround_params << std::endl;
     }
 
+    {
+      // Tell opted-in clients when a game captures the cursor; see cursor_state.h
+      stream::cursor::sample_t sample;
+      if (platf::sample_cursor(sample)) {
+        ss << stream::cursor::SDP_ATTRIBUTE << std::endl;
+      }
+    }
+
     if (config::audio.stream_mic) {
       // Microphone packets are always AES-GCM authenticated; see MIC_SDP_ATTRIBUTE
       ss << MIC_SDP_ATTRIBUTE << std::endl;
@@ -1048,6 +1057,11 @@ namespace rtsp_stream {
       }
 
       config.monitor.input_only = session.input_only;
+
+      if (auto it = args.find(stream::cursor::ENABLE_ARG); it != args.end() && it->second == "1"sv) {
+        config.cursor_state = true;
+        BOOST_LOG(info) << "Client wants cursor capture state messages"sv;
+      }
 
       configuredBitrateKbps = util::from_view(args.at("x-ml-video.configuredBitrateKbps"sv));
 

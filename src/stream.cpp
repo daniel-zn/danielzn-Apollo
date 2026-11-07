@@ -22,6 +22,7 @@ extern "C" {
 // local includes
 #include "config.h"
 #include "crypto.h"
+#include "cursor_state.h"
 #include "display_device.h"
 #include "globals.h"
 #include "input.h"
@@ -437,6 +438,8 @@ namespace stream {
 
       platf::feedback_queue_t feedback_queue;
       safe::mail_raw_t::event_t<video::hdr_info_t> hdr_queue;
+
+      int cursor_state_sent = -1;  ///< Last cursor capture state sent (-1: none yet); see cursor_state.h
     } control;
 
     std::uint32_t launch_session_id;
@@ -955,6 +958,24 @@ namespace stream {
     return 0;
   }
 
+  int send_cursor_state(session_t *session, bool captured) {
+    auto message = stream::cursor::encode_message(captured);
+    std::string_view plaintext {(const char *) message.data(), message.size()};
+
+    std::array<std::uint8_t, sizeof(control_encrypted_t) + crypto::cipher::round_to_pkcs7_padded(sizeof(message)) + crypto::cipher::tag_size>
+      encrypted_payload;
+
+    auto payload = encode_control(session, plaintext, encrypted_payload);
+    if (session->broadcast_ref->control_server.send(payload, session->control.peer)) {
+      TUPLE_2D(port, addr, platf::from_sockaddr_ex((sockaddr *) &session->control.peer->address.address));
+      BOOST_LOG(warning) << "Couldn't send cursor state to ["sv << addr << ':' << port << ']';
+      return -1;
+    }
+
+    BOOST_LOG(info) << "Cursor "sv << (captured ? "captured"sv : "free"sv);
+    return 0;
+  }
+
   void controlBroadcastThread(control_server_t *server) {
     server->map(packetTypes[IDX_PERIODIC_PING], [](session_t *session, const std::string_view &payload) {
       BOOST_LOG(verbose) << "type [IDX_PERIODIC_PING]"sv;
@@ -1154,13 +1175,33 @@ namespace stream {
     // termination when we shut down.
     auto shutdown_event = mail::man->event<bool>(mail::shutdown);
     auto broadcast_shutdown_event = mail::man->event<bool>(mail::broadcast_shutdown);
+
+    // Cursor capture state for clients that asked for it (cursor_state.h)
+    stream::cursor::detector_t cursor_detector;
+    auto next_cursor_sample = std::chrono::steady_clock::now();
+
     while (!shutdown_event->peek() && !broadcast_shutdown_event->peek()) {
       bool has_session_awaiting_peer = false;
+      bool wants_cursor_state = false;
+      std::optional<bool> cursor_captured;
 
       {
         auto lg = server->_sessions.lock();
 
         auto now = std::chrono::steady_clock::now();
+
+        for (auto &session : *server->_sessions) {
+          wants_cursor_state |= session->config.cursor_state && session->control.peer;
+        }
+        if (!wants_cursor_state) {
+          cursor_detector.reset();
+        } else if (now >= next_cursor_sample) {
+          next_cursor_sample = now + 100ms;
+          stream::cursor::sample_t sample;
+          if (platf::sample_cursor(sample)) {
+            cursor_captured = cursor_detector.update(sample, now);
+          }
+        }
 
         KITTY_WHILE_LOOP(auto pos = std::begin(*server->_sessions), pos != std::end(*server->_sessions), {
           // Don't perform additional session processing if we're shutting down
@@ -1210,6 +1251,12 @@ namespace stream {
               auto hdr_info = hdr_queue->pop();
 
               send_hdr_mode(session, std::move(hdr_info));
+            }
+
+            if (session->config.cursor_state && cursor_captured && session->control.cursor_state_sent != (int) *cursor_captured) {
+              if (send_cursor_state(session, *cursor_captured) == 0) {
+                session->control.cursor_state_sent = *cursor_captured;
+              }
             }
           }
 
