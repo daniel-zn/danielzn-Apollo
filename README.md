@@ -30,7 +30,7 @@ What it adds on top of upstream Apollo:
 - **Tells the client when a game captures the mouse (Windows).** While a game hides the cursor or holds it in its
   window, Apollo tells [danielzn-moonlight-qt](https://github.com/daniel-zn/danielzn-moonlight-qt) so it captures the
   mouse for camera control, and frees it again on the desktop. Only clients that ask get the message; the protocol is
-  in [src/cursor_state.h](src/cursor_state.h).
+  in [docs/cursor_state.md](docs/cursor_state.md).
 - **Game audio without extra software.** If Steam left Steam Streaming Speakers disabled, Apollo enables it when a
   stream starts, so game audio always has a capture device.
 - **Redesigned web UI.** An Apple-style Liquid Glass look in light and dark mode: a floating glass navigation bar,
