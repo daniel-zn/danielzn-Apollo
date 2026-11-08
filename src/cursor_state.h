@@ -17,7 +17,7 @@
  *   uint8 version (1), uint8 flags (bit 0: captured)
  * Clients ignore versions they don't know.
  *
- * The client side lives next to CURSOR_STATE_SDP_ATTRIBUTE in danielzn-moonlight-qt's
+ * The client side lives next to CURSOR_STATE_SDP_ATTRIBUTE in artemis-macos's
  * moonlight-common-c (Limelight-internal.h).
  */
 #pragma once

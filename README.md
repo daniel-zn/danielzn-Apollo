@@ -14,12 +14,12 @@ Major features:
 
 > [!NOTE]
 > This is a personal fork (`daniel-zn/danielzn-Apollo`, default branch `main`) made to pair with
-> [daniel-zn/danielzn-moonlight-qt](https://github.com/daniel-zn/danielzn-moonlight-qt). It doesn't follow upstream updates.
+> [daniel-zn/artemis-macos](https://github.com/daniel-zn/artemis-macos). It doesn't follow upstream updates.
 
 What it adds on top of upstream Apollo:
 
 - **Microphone passthrough from the client (Windows).** Receives the microphone from
-  [daniel-zn/danielzn-moonlight-qt](https://github.com/daniel-zn/danielzn-moonlight-qt) and plays it into the Steam Streaming
+  [daniel-zn/artemis-macos](https://github.com/daniel-zn/artemis-macos) and plays it into the Steam Streaming
   Microphone, so host apps use `Microphone (Steam Streaming Microphone)` as their input. Turn it on with
   `stream_mic = enabled`. Details are in [docs/remote_microphone.md](docs/remote_microphone.md).
   - Built on [logabell's PR #1428](https://github.com/ClassicOldSong/Apollo/pull/1428), with the protocol and host
@@ -28,7 +28,7 @@ What it adds on top of upstream Apollo:
   - Apollo enables the Steam microphone endpoint while it's in use and restores the endpoint and its format
     afterwards. It also puts back the default playback and recording devices after installing a Steam driver.
 - **Tells the client when a game captures the mouse (Windows).** While a game hides the cursor or holds it in its
-  window, Apollo tells [danielzn-moonlight-qt](https://github.com/daniel-zn/danielzn-moonlight-qt) so it captures the
+  window, Apollo tells [artemis-macos](https://github.com/daniel-zn/artemis-macos) so it captures the
   mouse for camera control, and frees it again on the desktop. Only clients that ask get the message; the protocol is
   in [docs/cursor_state.md](docs/cursor_state.md).
 - **Game audio without extra software.** If Steam left Steam Streaming Speakers disabled, Apollo enables it when a

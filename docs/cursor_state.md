@@ -2,7 +2,7 @@
 
 On Windows, Apollo tells a client when a game has captured the mouse cursor, so the client can hold its
 own pointer in the stream while a game uses the mouse to look around, and let it leave the window the rest of
-the time. [Artemis for Mac](https://github.com/daniel-zn/danielzn-moonlight-qt) uses it for its
+the time. [Artemis for Mac](https://github.com/daniel-zn/artemis-macos) uses it for its
 **Switch mouse mode automatically for games** setting (on by default): relative mouse while captured,
 absolute ("remote desktop") mouse while free. Ctrl+Alt+Shift+M on the client makes it manual again.
 
