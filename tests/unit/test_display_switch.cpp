@@ -12,15 +12,24 @@ using display_switch::display_mode_t;
 using display_switch::step_e;
 
 TEST(DisplaySwitchTest, AnotherClientAlwaysGetsANewDisplay) {
-  // Mac (2560x1440@60) owns the display, the phone (2556x1179@120) resumes
-  EXPECT_EQ(display_switch::on_connect(false, false), step_e::recreate);
+  // Mac (2560x1440@60) owns the display and has left, the phone (2556x1179@120) connects alone
+  EXPECT_EQ(display_switch::on_connect(false, false, false), step_e::recreate);
   // Even when the display already runs at the new client's mode
-  EXPECT_EQ(display_switch::on_connect(false, true), step_e::recreate);
+  EXPECT_EQ(display_switch::on_connect(false, false, true), step_e::recreate);
 }
 
 TEST(DisplaySwitchTest, TheSameClientKeepsOrChangesInPlace) {
-  EXPECT_EQ(display_switch::on_connect(true, true), step_e::keep);
-  EXPECT_EQ(display_switch::on_connect(true, false), step_e::change_in_place);
+  EXPECT_EQ(display_switch::on_connect(false, true, true), step_e::keep);
+  EXPECT_EQ(display_switch::on_connect(false, true, false), step_e::change_in_place);
+}
+
+TEST(DisplaySwitchTest, WhileAnotherClientStreamsTheDisplayStaysAsItIs) {
+  // The TV streams at 3840x2160@60, the phone joins at 2556x1179@120: the TV keeps its display
+  EXPECT_EQ(display_switch::on_connect(true, false, false), step_e::keep);
+  EXPECT_EQ(display_switch::on_connect(true, false, true), step_e::keep);
+  // The owner reconnecting while the phone still streams doesn't change it either
+  EXPECT_EQ(display_switch::on_connect(true, true, false), step_e::keep);
+  EXPECT_EQ(display_switch::on_connect(true, true, true), step_e::keep);
 }
 
 TEST(DisplaySwitchTest, AnInPlaceChangeThatDidNotHoldRecreates) {

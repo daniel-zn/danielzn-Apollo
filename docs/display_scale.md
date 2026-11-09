@@ -20,24 +20,31 @@ Windows' recommended value for the resolution.
   a percentage from Windows' list (100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500). Other values read
   from the file or the web UI become the nearest step; a missing key is Auto.
 - **When it is saved.** For the client whose mode the virtual display currently has (the "owner"): when one of
-  its stream sessions ends, before another client's resume takes the display over, and before the virtual
+  its stream sessions ends, before another client takes the display over, and before the virtual
   display is removed. The scale is saved as Auto when it equals Windows' recommendation at that moment, so a
   client that never changed it keeps following Windows' default at any resolution.
 - **When it is applied.** After the virtual display is created at launch, and after the mode is checked or
-  changed on a resume (`apply_client_display_mode`). Auto sets the recommended scale, so a client never
+  changed on a resume (`apply_client_display_mode`), unless another client is streaming (see below). Auto sets the recommended scale, so a client never
   inherits the previous client's scale.
-- **Several clients.** The client that connected or resumed most recently owns the display and its scale
-  (the same rule as the display mode). The log names the owner.
+- **Several clients.** The owner is the client that last set the display's mode: the last one to connect while
+  nobody else was streaming (the same rule as the display mode). The log names the owner.
 
 ## The virtual display's mode when clients switch
 
 When a client launches or resumes the running app (`apply_client_display_mode`, decisions in
 `src/display_switch.h`):
 
-- **Another client than the owner** (the last one to launch or resume): the virtual display is removed and created
+- **Another client is streaming** (a session of a different client; this client's own earlier session, say a
+  reconnect before it timed out, doesn't count): nothing changes. The display keeps its mode, HDR, scale and owner,
+  and the joining client's stream is the display scaled to the size it asked for, with black bars when the aspect
+  ratio differs (the encoder keeps the aspect ratio). So a TV keeps its mode while a phone that controls the same
+  session connects, leaves and comes back. When the owner leaves and others keep streaming, nothing changes either;
+  the next client to connect while nobody else streams follows the rules below. Log line:
+  `Keeping virtual display … at … for client [TV] (N other active session(s)); client [iPhone] joins at …, scaled to fit`.
+- **Another client than the owner, nobody else streaming:** the virtual display is removed and created
   again, with the same identity, at the new client's mode, even when the mode is the same. The previous owner's
   scale is saved first; HDR and the new owner's scale are applied once the new display is up. The running app stays
-  up (its windows may move). With other sessions still streaming, the newest client still wins and the log says so.
+  up (its windows may move).
 - **The owner again, same mode:** nothing changes.
 - **The owner again, another mode:** the mode is set in place and read back a few times over about half a second;
   if it doesn't read back as asked (Windows sometimes reports a new mode and falls back to the old one), the display

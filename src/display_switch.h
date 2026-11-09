@@ -43,18 +43,23 @@ namespace display_switch {
   }
 
   enum class step_e {
-    keep,  ///< The display already has the client's mode.
+    keep,  ///< Leave the display as it is: it already has the client's mode, or another client is streaming it.
     change_in_place,  ///< Set the client's mode on the display as it is.
     recreate,  ///< Remove the display and create it again at the client's mode.
   };
 
   /**
    * @brief First step for a client that launches or resumes while the virtual display is up.
-   * @param same_owner The client is the one whose mode the display has (the last to launch or resume).
+   * @param others_streaming Another client (not this one's own earlier session) is streaming the display.
+   * @param same_owner The client is the one whose mode the display has (the last to set it).
    * @param mode_matches The display already runs at the client's mode.
-   * A different client always gets a new display, so nothing of the previous client's mode carries over.
+   * While another client streams, the display stays as it is and the joining client gets it scaled to its size.
+   * Otherwise a different client always gets a new display, so nothing of the previous client's mode carries over.
    */
-  constexpr step_e on_connect(bool same_owner, bool mode_matches) {
+  constexpr step_e on_connect(bool others_streaming, bool same_owner, bool mode_matches) {
+    if (others_streaming) {
+      return step_e::keep;
+    }
     if (!same_owner) {
       return step_e::recreate;
     }

@@ -773,10 +773,45 @@ namespace proc {
       return;
     }
 
-    // The resuming client takes the virtual display over: remember the previous owner's scale first,
-    // then give the display this client's scale once its mode is set (the most recent client wins)
+    uint32_t render_width;
+    uint32_t render_height;
+    render_size(_app, *launch_session, render_width, render_height);
+    launch_session->width = render_width;
+    launch_session->height = render_height;
+
+    const int target_fps = display_fps(*launch_session);
+    const auto mode_str = std::format("{}x{}@{:.3f}Hz", render_width, render_height, target_fps / 1000.0);
+    const auto &client = launch_session->device_name;
+
+    // Sessions of other clients; this client's own earlier session (a reconnect before it timed out) doesn't count
+    rtsp_stream::session_count();  // drops stopped sessions
+    int others = 0;
+    for (const auto &uuid : rtsp_stream::get_all_session_uuids()) {
+      others += uuid != launch_session->unique_id;
+    }
+
+    // The resumed session streams the same virtual display, so it keeps the display's GUID
+    launch_session->virtual_display = true;
+    launch_session->display_guid = _launch_session->display_guid;
+
+    auto display_name_w = platf::from_utf8(display_name);
+    auto now = read_mode(display_name_w);
+
     std::lock_guard scale_lock {display_scale_mutex};
     const bool same_owner = !_scale_owner_uuid.empty() && _scale_owner_uuid == launch_session->unique_id;
+    auto step = display_switch::on_connect(others > 0, same_owner, display_switch::matches(now, render_width, render_height, target_fps));
+
+    if (step == display_switch::step_e::keep && others > 0) {
+      // Someone else is watching: the display keeps its mode, HDR, scale and owner; the encoder scales it to this
+      // client's size (letterboxed when the aspect ratio differs)
+      BOOST_LOG(info) << "Keeping virtual display "sv << display_name << " at "sv << mode_text(now) << " for client ["sv << _scale_owner_name
+                      << "] ("sv << others << " other active session(s)); client ["sv << client << "] joins at "sv << mode_str
+                      << ", scaled to fit"sv;
+      return;
+    }
+
+    // The client takes the virtual display over: remember the previous owner's scale first,
+    // then give the display this client's scale once its mode is set
     const std::string previous_owner = _scale_owner_name;
     if (!same_owner) {
       save_owner_scale("client ["s + launch_session->device_name + "] took the virtual display over");
@@ -789,25 +824,6 @@ namespace proc {
     auto apply_scale = util::fail_guard([this]() {
       apply_owner_scale();
     });
-
-    uint32_t render_width;
-    uint32_t render_height;
-    render_size(_app, *launch_session, render_width, render_height);
-    launch_session->width = render_width;
-    launch_session->height = render_height;
-
-    const int target_fps = display_fps(*launch_session);
-    const auto mode_str = std::format("{}x{}@{:.3f}Hz", render_width, render_height, target_fps / 1000.0);
-    const auto &client = launch_session->device_name;
-    const auto others = rtsp_stream::session_count();
-
-    // The resumed session streams the same virtual display, so it keeps the display's GUID
-    launch_session->virtual_display = true;
-    launch_session->display_guid = _launch_session->display_guid;
-
-    auto display_name_w = platf::from_utf8(display_name);
-    auto now = read_mode(display_name_w);
-    auto step = display_switch::on_connect(same_owner, display_switch::matches(now, render_width, render_height, target_fps));
 
     if (step == display_switch::step_e::keep) {
       BOOST_LOG(info) << "Virtual display "sv << display_name << " already runs at "sv << mode_str << " for client ["sv << client << "], keeping it"sv;
@@ -828,7 +844,7 @@ namespace proc {
 
     if (step == display_switch::step_e::change_in_place) {
       BOOST_LOG(info) << "Virtual display "sv << display_name << " runs at "sv << mode_text(now) << "; client ["sv << client << "] resumed at "sv
-                      << mode_str << ", changing the mode in place ["sv << others << " other active session(s)]"sv;
+                      << mode_str << ", changing the mode in place"sv;
       set_mode();
       step = display_switch::after_in_place(mode_held(display_name_w, render_width, render_height, target_fps, now));
       if (step == display_switch::step_e::keep) {
@@ -840,8 +856,7 @@ namespace proc {
     } else {
       // Another client: a new display, so nothing of the previous client's mode carries over
       BOOST_LOG(info) << "Virtual display "sv << display_name << " runs at "sv << mode_text(now) << " for client ["sv << previous_owner << "]; client ["sv
-                      << client << "] connected at "sv << mode_str << ", recreating the virtual display ["sv << others << " other active session(s)"sv
-                      << (others ? ", the newest client wins"sv : ""sv) << ']';
+                      << client << "] connected at "sv << mode_str << ", recreating the virtual display"sv;
     }
 
     if (step == display_switch::step_e::recreate) {
