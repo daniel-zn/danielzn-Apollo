@@ -5,10 +5,12 @@
 // standard includes
 #include <csignal>
 #include <filesystem>
+#include <functional>
 #include <iomanip>
 #include <iterator>
 #include <set>
 #include <sstream>
+#include <thread>
 
 #ifndef BOOST_PROCESS_VERSION
  #define BOOST_PROCESS_VERSION 1
@@ -101,6 +103,7 @@ namespace {
 namespace bp = boost::process;
 
 static std::string ensureCrLf(const std::string& utf8Str);
+static bool openClipboard();
 static std::wstring getClipboardData();
 static int setClipboardData(const std::wstring& utf16Str);
 
@@ -1856,16 +1859,28 @@ namespace platf {
     return std::make_unique<win32_high_precision_timer>();
   }
 
+  // The clipboard is used from a new thread, which starts on the process's own
+  // desktop (WinSta0\Default, the user's). The HTTPS thread that serves the
+  // clipboard requests also launches streams, and syncThreadDesktop() leaves it on
+  // the input desktop of that moment: Winlogon when a stream starts at the sign-in
+  // or lock screen, where OpenClipboard() is refused (ERROR_ACCESS_DENIED) for as
+  // long as Apollo runs.
+  template<class T>
+  static T on_own_thread(const std::function<T()> &work) {
+    T result {};
+    std::thread([&]() { result = work(); }).join();
+    return result;
+  }
+
   std::string
   get_clipboard() {
-    std::string currentClipboard = to_utf8(getClipboardData());
-    return currentClipboard;
+    return on_own_thread<std::string>([]() { return to_utf8(getClipboardData()); });
   }
 
   bool
   set_clipboard(const std::string& content) {
     std::wstring cpContent = from_utf8(ensureCrLf(content));
-    return !setClipboardData(cpContent);
+    return on_own_thread<bool>([&]() { return setClipboardData(cpContent) == 0; });
   }
 }  // namespace platf
 
@@ -1883,9 +1898,24 @@ static std::string ensureCrLf(const std::string& utf8Str) {
     return result;
 }
 
+// Another app may have the clipboard open for a moment (right after a copy, every
+// clipboard listener reads it), so try for up to ~200 ms
+static bool openClipboard() {
+  for (int attempt = 1;; ++attempt) {
+    if (OpenClipboard(nullptr)) {
+      return true;
+    }
+    auto err = GetLastError();
+    if (attempt == 10) {
+      BOOST_LOG(warning) << "Failed to open clipboard [error "sv << err << ']';
+      return false;
+    }
+    Sleep(20);
+  }
+}
+
 static std::wstring getClipboardData() {
-  if (!OpenClipboard(nullptr)) {
-    BOOST_LOG(warning) << "Failed to open clipboard.";
+  if (!openClipboard()) {
     return L"";
   }
 
@@ -1912,8 +1942,7 @@ static std::wstring getClipboardData() {
 }
 
 static int setClipboardData(const std::wstring& utf16Str) {
-  if (!OpenClipboard(nullptr)) {
-    BOOST_LOG(warning) << "Failed to open clipboard.";
+  if (!openClipboard()) {
     return 1;
   }
 
