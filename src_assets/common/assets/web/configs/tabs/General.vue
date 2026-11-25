@@ -244,6 +244,17 @@ onMounted(() => {
               v-model="config.hide_tray_controls"
               default="false"
     ></Checkbox>
+
+    <!-- Lock PC after stream ends -->
+    <div class="mb-3" v-if="platform === 'windows'">
+      <label for="lock_after_stream" class="form-label">{{ $t('config.lock_after_stream') }}</label>
+      <select id="lock_after_stream" class="form-select" v-model="config.lock_after_stream">
+        <option value="-1">{{ $t('_common.disabled_def') }}</option>
+        <option value="0">{{ $t('config.lock_after_stream_now') }}</option>
+        <option v-for="m in [1, 5, 10, 15, 30]" :value="String(m)">{{ $t('config.lock_after_stream_minutes', m) }}</option>
+      </select>
+      <div class="form-text">{{ $t('config.lock_after_stream_desc') }}</div>
+    </div>
   </div>
 </template>
 

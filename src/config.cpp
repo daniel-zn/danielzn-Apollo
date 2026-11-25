@@ -601,6 +601,7 @@ namespace config {
     false,  // notify_pre_releases
     false,  // legacy_ordering
     true,  // system_tray
+    -1,  // lock_after_stream (off)
     {},  // prep commands
     {},  // state commands
     {},  // server commands
@@ -1307,6 +1308,7 @@ namespace config {
     bool_f(vars, "notify_pre_releases", sunshine.notify_pre_releases);
     bool_f(vars, "legacy_ordering", sunshine.legacy_ordering);
     bool_f(vars, "forward_rumble", input.forward_rumble);
+    int_between_f(vars, "lock_after_stream", sunshine.lock_after_stream, {-1, 1440});
 
     int port = sunshine.port;
     int_between_f(vars, "port"s, port, {1024 + nvhttp::PORT_HTTPS, 65535 - rtsp_stream::RTSP_SETUP_PORT});

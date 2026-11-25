@@ -14,6 +14,7 @@
 #include "entry_handler.h"
 #include "globals.h"
 #include "httpcommon.h"
+#include "lock_after_stream.h"
 #include "logging.h"
 #include "main.h"
 #include "nvhttp.h"
@@ -430,6 +431,7 @@ int main(int argc, char *argv[]) {
   std::thread httpThread {nvhttp::start};
   std::thread configThread {confighttp::start};
   std::thread rtspThread {rtsp_stream::start};
+  std::thread lockThread {lock_after_stream::run};
 
 #ifdef _WIN32
   // If we're using the default port and GameStream is enabled, warn the user
@@ -461,6 +463,7 @@ int main(int argc, char *argv[]) {
   httpThread.join();
   configThread.join();
   rtspThread.join();
+  lockThread.join();
 
   task_pool.stop();
   task_pool.join();

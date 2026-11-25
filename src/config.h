@@ -288,6 +288,7 @@ namespace config {
     bool notify_pre_releases;
     bool legacy_ordering;
     bool system_tray;
+    int lock_after_stream;  ///< Minutes after the last stream ends to lock the PC; -1 off, 0 immediately
     std::vector<prep_cmd_t> prep_cmds;
     std::vector<prep_cmd_t> state_cmds;
     std::vector<server_cmd_t> server_cmds;

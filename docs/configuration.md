@@ -284,6 +284,32 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### lock_after_stream
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Minutes after the last client disconnects to lock Windows (`-1` off, `0` immediately). A client
+            reconnecting cancels it, and it waits until nobody has used the PC's own keyboard or mouse for the whole
+            delay. Nothing happens if the session is already locked or nobody is signed in.
+            @note{Applies to Windows only.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            -1
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            lock_after_stream = 5
+            @endcode</td>
+    </tr>
+</table>
+
 ## Input
 
 ### controller

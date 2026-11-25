@@ -90,6 +90,8 @@ set(SUNSHINE_TARGET_FILES
         "${CMAKE_SOURCE_DIR}/src/stream.cpp"
         "${CMAKE_SOURCE_DIR}/src/cursor_state.cpp"
         "${CMAKE_SOURCE_DIR}/src/cursor_state.h"
+        "${CMAKE_SOURCE_DIR}/src/lock_after_stream.cpp"
+        "${CMAKE_SOURCE_DIR}/src/lock_after_stream.h"
         "${CMAKE_SOURCE_DIR}/src/mic_packet.cpp"
         "${CMAKE_SOURCE_DIR}/src/mic_packet.h"
         "${CMAKE_SOURCE_DIR}/src/display_scale.cpp"
