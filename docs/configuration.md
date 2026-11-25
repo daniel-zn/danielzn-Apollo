@@ -238,6 +238,29 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### global_state_cmd
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            A list of commands run when any application resumes (the first client connects while no client is connected) or pauses (all clients disconnect): "do" on resume, "undo" on pause. They are not run when the session ends; clean up their side effects in the preparation undo commands. Same format as [global_prep_cmd](#global_prep_cmd).
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            []
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            global_state_cmd = [{"do":"nircmd.exe setdisplay 1280 720 32 144","elevated":false,"undo":"nircmd.exe setdisplay 2560 1440 32 144"}]
+            @endcode</td>
+    </tr>
+</table>
+
 ### notify_pre_releases
 
 <table>
@@ -280,6 +303,75 @@ editing the `conf` file in a text editor. Use the examples as reference.
         <td>Example</td>
         <td colspan="2">@code{}
             system_tray = enabled
+            @endcode</td>
+    </tr>
+</table>
+
+### hide_tray_controls
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Do not show "Force Stop", "Restart" and "Quit" in the tray menu.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            hide_tray_controls = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### enable_pairing
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Enable pairing for Moonlight clients. When disabled, no new client can pair.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            enabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            enable_pairing = enabled
+            @endcode</td>
+    </tr>
+</table>
+
+### enable_discovery
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Announce Apollo on the local network so clients find it. When disabled, you'll need to enter the host's IP on the client to pair.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            enabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            enable_discovery = enabled
             @endcode</td>
     </tr>
 </table>
@@ -713,6 +805,52 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### enable_input_only_mode
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Add an Input Only app entry. When enabled, while streaming the app list shows only the running app and the Input Only entry, which receives no image or audio. Useful for operating the desktop on a TV, or for connecting peripherals the TV doesn't support through a phone.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            enable_input_only_mode = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### forward_rumble
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Forward rumble messages to clients.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            enabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            forward_rumble = enabled
+            @endcode</td>
+    </tr>
+</table>
+
 ### keybindings
 
 <table>
@@ -972,6 +1110,52 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### keep_sink_default
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Keep the selected virtual sink as the default (effective when host audio output is disabled).
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            enabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            keep_sink_default = enabled
+            @endcode</td>
+    </tr>
+</table>
+
+### auto_capture_sink
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Capture the current audio sink again after the default audio sink changes.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            enabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            auto_capture_sink = enabled
+            @endcode</td>
+    </tr>
+</table>
+
 ### adapter_name
 
 <table>
@@ -1138,27 +1322,6 @@ editing the `conf` file in a text editor. Use the examples as reference.
             @endcode</td>
     </tr>
 </table>
-
-### isolated_virtual_display_option
-
-<table>
-    <tr>
-        <td>Description</td>
-        <td colspan="2">
-            Isolates the virtual display.
-            @note{Applies to Windows only.}
-        </td>
-    </tr>
-    <tr>
-        <td>Default</td>
-        <td colspan="2">@code{}disabled@endcode</td>
-    </tr>
-    <tr>
-        <td>enabled</td>
-        <td>Change the position of the virtual display (and other displays if there is a hole)</td>
-    </tr>
-</table>
-
 
 ### dd_configuration_option
 
@@ -1515,6 +1678,77 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### fallback_mode
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            The display mode used when the client doesn't send one, or when an app is launched from the web UI. Format: [Width]x[Height]x[FPS].
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            fallback_mode = 1920x1080x60
+            @endcode</td>
+    </tr>
+</table>
+
+### headless_mode
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Start Apollo in headless mode: every app starts on a virtual display.
+            @note{Applies to Windows only.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            headless_mode = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### double_refreshrate
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Double the requested refresh rate when creating virtual displays; the streamed refresh rate stays the same. Can reduce stutter on some systems.
+            @note{Applies to Windows only.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            double_refreshrate = disabled
+            @endcode</td>
+    </tr>
+</table>
+
 ### max_bitrate
 
 <table>
@@ -1563,6 +1797,27 @@ editing the `conf` file in a text editor. Use the examples as reference.
         <td>Specify your own value. The real minimum may differ from this value.</td>
     </tr>
 </table>
+
+### isolated_virtual_display_option
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Isolates the virtual display.
+            @note{Applies to Windows only.}
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}disabled@endcode</td>
+    </tr>
+    <tr>
+        <td>enabled</td>
+        <td>Change the position of the virtual display (and other displays if there is a hole)</td>
+    </tr>
+</table>
+
 
 ## Network
 
@@ -2029,6 +2284,98 @@ editing the `conf` file in a text editor. Use the examples as reference.
     </tr>
 </table>
 
+### limit_framerate
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Limit the captured framerate to the framerate the client asked for. May not reach the full framerate if vsync is on and the display's refresh rate doesn't match. Disabling it can cause lag on some clients.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            enabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            limit_framerate = enabled
+            @endcode</td>
+    </tr>
+</table>
+
+### envvar_compatibility_mode
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Compatibility mode for environment variables: changes how certain environment variables behave, for older tools.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            envvar_compatibility_mode = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### legacy_ordering
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Ordering workaround for legacy clients. Can cause issues with clients or scripts that can't handle UTF-8 correctly. Artemis clients support ordering without it.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            legacy_ordering = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### ignore_encoder_probe_failure
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Allow streaming to continue even if probing for encoders fails. Streaming may then fail if no encoder is available.
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            ignore_encoder_probe_failure = disabled
+            @endcode</td>
+    </tr>
+</table>
+
 ### hevc_mode
 
 <table>
@@ -2474,6 +2821,29 @@ editing the `conf` file in a text editor. Use the examples as reference.
         <td>Example</td>
         <td colspan="2">@code{}
             nvenc_h264_cavlc = disabled
+            @endcode</td>
+    </tr>
+</table>
+
+### nvenc_intra_refresh
+
+<table>
+    <tr>
+        <td>Description</td>
+        <td colspan="2">
+            Use intra refresh, which some clients need to keep rendering correctly (e.g. the Xbox client).
+        </td>
+    </tr>
+    <tr>
+        <td>Default</td>
+        <td colspan="2">@code{}
+            disabled
+            @endcode</td>
+    </tr>
+    <tr>
+        <td>Example</td>
+        <td colspan="2">@code{}
+            nvenc_intra_refresh = disabled
             @endcode</td>
     </tr>
 </table>
