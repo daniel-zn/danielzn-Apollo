@@ -23,6 +23,7 @@ extern "C" {
 #include "config.h"
 #include "globals.h"
 #include "input.h"
+#include "lock_after_stream.h"
 #include "logging.h"
 #include "platform/common.h"
 #include "thread_pool.h"
@@ -48,6 +49,7 @@ namespace input {
   constexpr auto VKEY_LCONTROL = 0xA2;
   constexpr auto VKEY_RCONTROL = 0xA3;
   constexpr auto VKEY_MENU = 0x12;
+  constexpr auto VKEY_MASK = 0xE8;  ///< An unassigned key: pressing it keeps a lone Win key's release from opening Start.
   constexpr auto VKEY_LMENU = 0xA4;
   constexpr auto VKEY_RMENU = 0xA5;
 
@@ -744,6 +746,18 @@ namespace input {
 
     auto &pressed = key_press[make_kpid(keyCode, packet->flags)];
     if (!pressed) {
+#ifdef _WIN32
+      if (lock_after_stream::is_lock_shortcut(keyCode, release, packet->modifiers)) {
+        // Windows ignores an injected Win+L, so lock here. The L stays on the client (its key up finds it
+        // released), and the mask key keeps the Win key's release from opening Start.
+        platf::keyboard_update(platf_input, VKEY_MASK, false, 0);
+        platf::keyboard_update(platf_input, VKEY_MASK, true, 0);
+        task_pool.push([]() {
+          lock_after_stream::lock("Win+L from a client");
+        });
+        return;
+      }
+#endif
       if (!release) {
         // A new key has been pressed down, we need to check for key combo's
         // If a key-combo has been pressed down, don't pass it through

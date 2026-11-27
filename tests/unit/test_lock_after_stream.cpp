@@ -88,3 +88,14 @@ TEST(LockAfterStreamTest, TurningItOffCancelsAPendingLock) {
   EXPECT_FALSE(timer.update(-1, false, t0 + 2min, t0));
   EXPECT_FALSE(timer.update(5, false, t0 + 10min, t0));
 }
+
+TEST(LockAfterStreamTest, WinLFromAClientIsTheLockShortcut) {
+  constexpr uint8_t win = 0x08, alt = 0x04, ctrl = 0x02;
+  EXPECT_TRUE(lock_after_stream::is_lock_shortcut('L', false, win));
+  EXPECT_TRUE(lock_after_stream::is_lock_shortcut('L', false, win | ctrl));
+  // Only the press locks; its release, a plain L and other Win shortcuts pass through
+  EXPECT_FALSE(lock_after_stream::is_lock_shortcut('L', true, win));
+  EXPECT_FALSE(lock_after_stream::is_lock_shortcut('L', false, 0));
+  EXPECT_FALSE(lock_after_stream::is_lock_shortcut('L', false, alt));
+  EXPECT_FALSE(lock_after_stream::is_lock_shortcut('D', false, win));
+}

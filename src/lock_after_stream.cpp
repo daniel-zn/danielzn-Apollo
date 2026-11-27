@@ -37,12 +37,9 @@ namespace lock_after_stream {
     return now - std::chrono::milliseconds(GetTickCount() - info.dwTime);
   }
 
-  /**
-   * @brief Locks the signed-in user's session; does nothing when it's already locked or nobody is signed in.
-   */
-  static void lock() {
+  void lock(const char *reason) {
     if (is_user_session_locked()) {
-      BOOST_LOG(info) << "Lock after stream: the session is already locked"sv;
+      BOOST_LOG(info) << reason << ": the session is already locked"sv;
       return;
     }
     // LockWorkStation works only from the user's own session, so it runs there like apps and commands do.
@@ -51,11 +48,11 @@ namespace lock_after_stream {
     boost::filesystem::path dir;
     auto child = platf::run_command(false, true, "rundll32.exe user32.dll,LockWorkStation", dir, env, nullptr, ec, nullptr);
     if (ec) {
-      BOOST_LOG(info) << "Lock after stream: not locked, no signed-in session ("sv << ec.message() << ')';
+      BOOST_LOG(info) << reason << ": not locked, no signed-in session ("sv << ec.message() << ')';
       return;
     }
     child.wait();
-    BOOST_LOG(info) << "Lock after stream: locked the PC"sv;
+    BOOST_LOG(info) << reason << ": locked the PC"sv;
   }
 
   void run() {
@@ -64,12 +61,14 @@ namespace lock_after_stream {
     while (!shutdown_event->peek()) {
       const auto now = clock::now();
       if (timer.update(config::sunshine.lock_after_stream, rtsp_stream::session_count() > 0, now, last_input(now))) {
-        lock();
+        lock("Lock after stream");
       }
       std::this_thread::sleep_for(1s);
     }
   }
 #else
+  void lock(const char *) {}
+
   void run() {}
 #endif
 }  // namespace lock_after_stream
